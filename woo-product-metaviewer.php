@@ -7,6 +7,7 @@ Version: 1.1 beta
 Author: Dataforge
 Author URI: https://dataforge.us
 License: GPL2
+ * GitHub Plugin URI: https://github.com/dataforge/woo-product-metaviewer
 */
 
 class Product_Meta_Viewer {
