@@ -1,6 +1,6 @@
 <?php
 /*
-Plugin Name: Woo Product Meta Viewer Beta
+Plugin Name: Woo Product Meta Viewer
 Plugin URI: https://github.com/dataforge/woo-product-metaviewer
 Description: This is a plugin to view and compare product metadata of Woocommerce items.
 Version: 1.1
@@ -26,8 +26,8 @@ class Product_Meta_Viewer {
     function add_product_meta_viewer_menu() {
         add_submenu_page(
             'woocommerce', 
-            'Product Meta Viewer Plugin Beta', 
-            'Product Meta Viewer Plugin Beta ', 
+            'Woo Product Meta Viewer', 
+            'Woo Product Meta Viewer', 
             'manage_options', 
             'product-meta-viewer', 
             array($this, 'display_product_meta_admin_page')
