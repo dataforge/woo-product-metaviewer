@@ -1,13 +1,12 @@
 <?php
 /*
-Plugin Name: Woocommerce Product Meta Viewer Beta
-Plugin URI: https://dataforge.us
+Plugin Name: Woo Product Meta Viewer Beta
+Plugin URI: https://github.com/dataforge/woo-product-metaviewer
 Description: This is a plugin to view and compare product metadata of Woocommerce items.
-Version: 1.1 beta
+Version: 1.1
 Author: Dataforge
-Author URI: https://dataforge.us
 License: GPL2
- * GitHub Plugin URI: https://github.com/dataforge/woo-product-metaviewer
+GitHub Plugin URI: https://github.com/dataforge/woo-product-metaviewer
 */
 
 class Product_Meta_Viewer {
