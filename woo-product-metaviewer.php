@@ -9,6 +9,10 @@ License: GPL2
 GitHub Plugin URI: https://github.com/dataforge/woo-product-metaviewer
 */
 
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
 class Product_Meta_Viewer {
     function __construct() {
         add_action('admin_menu', array($this, 'add_product_meta_viewer_menu'));
