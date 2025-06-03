@@ -36,6 +36,7 @@ class Product_Meta_Viewer {
             'product-meta-viewer', 
             array($this, 'display_product_meta_admin_page')
         );
+        // Removed settings submenu; settings will be a tab on the main page
     }
 
     function get_product_categories($product_id) {
@@ -373,30 +374,46 @@ class Product_Meta_Viewer {
     }
 
     function display_product_meta_admin_page() {
+        // Tab logic
+        $active_tab = isset($_GET['tab']) ? sanitize_text_field($_GET['tab']) : 'viewer';
+
         echo '<div class="wrap">';
         echo '<h1>Product Meta Viewer</h1>';
-        
+
+        // Tab navigation
+        echo '<h2 class="nav-tab-wrapper">';
+        echo '<a href="' . esc_url(admin_url('admin.php?page=product-meta-viewer&tab=viewer')) . '" class="nav-tab' . ($active_tab === 'viewer' ? ' nav-tab-active' : '') . '">Meta Viewer</a>';
+        echo '<a href="' . esc_url(admin_url('admin.php?page=product-meta-viewer&tab=settings')) . '" class="nav-tab' . ($active_tab === 'settings' ? ' nav-tab-active' : '') . '">Settings</a>';
+        echo '</h2>';
+
+        if ($active_tab === 'settings') {
+            $this->display_settings_tab_content();
+            echo '</div>';
+            return;
+        }
+
+        // --- Meta Viewer tab content (original code) ---
         // Get product details from GET parameters
         $sku1 = isset($_GET['sku1']) ? sanitize_text_field($_GET['sku1']) : '';
         $id1 = isset($_GET['id1']) ? intval($_GET['id1']) : '';
         $sku2 = isset($_GET['sku2']) ? sanitize_text_field($_GET['sku2']) : '';
         $id2 = isset($_GET['id2']) ? intval($_GET['id2']) : '';
-        
+
         // Check if form was submitted via POST and redirect to GET URL
         if (isset($_POST['submit']) && check_admin_referer('display_product_meta_action', '_wpnonce')) {
             $post_sku1 = isset($_POST['product_sku_1']) ? sanitize_text_field($_POST['product_sku_1']) : '';
             $post_id1 = isset($_POST['product_id_1']) ? intval($_POST['product_id_1']) : '';
             $post_sku2 = isset($_POST['product_sku_2']) ? sanitize_text_field($_POST['product_sku_2']) : '';
             $post_id2 = isset($_POST['product_id_2']) ? intval($_POST['product_id_2']) : '';
-            
+
             // Build redirect URL
             $redirect_url = $this->get_permalink_with_params($post_sku1, $post_id1, $post_sku2, $post_id2);
-            
+
             // Perform the redirect
             wp_redirect($redirect_url);
             exit;
         }
-        
+
         $product_ids_1 = array();
         $product_ids_2 = array();
 
@@ -437,7 +454,7 @@ class Product_Meta_Viewer {
                 $metadata1 = get_post_meta($product1->get_id());
                 $metadata1['product_categories'] = $this->get_product_categories($product1->is_type('variation') ? $product1->get_parent_id() : $product1->get_id());
                 $this->display_product_metadata_table($product1, $metadata1);
-                
+
                 // Display permalink with parameters
                 $view_link = $this->get_permalink_with_params($sku1, $id1);
                 echo '<div class="permalink-box">';
@@ -450,7 +467,7 @@ class Product_Meta_Viewer {
         elseif (!empty($product_ids_1) && !empty($product_ids_2)) {
             $product1 = wc_get_product($product_ids_1[0]);
             $product2 = wc_get_product($product_ids_2[0]);
-            
+
             if ($product1 && $product2) {
                 echo '<h2>Comparing Metadata</h2>';
 
@@ -463,7 +480,7 @@ class Product_Meta_Viewer {
                 $metadata2['product_categories'] = $this->get_product_categories($product2->is_type('variation') ? $product2->get_parent_id() : $product2->get_id());
 
                 $this->display_comparison_table($product1, $metadata1, $product2, $metadata2);
-                
+
                 // Display permalink with parameters for comparison
                 $compare_link = $this->get_permalink_with_params($sku1, $id1, $sku2, $id2);
                 echo '<div class="permalink-box">';
@@ -474,31 +491,31 @@ class Product_Meta_Viewer {
         } else {
             echo '<p>Please provide a valid SKU or ID for at least one product.</p>';
         }
-        
+
         // Form for searching products - now using POST with redirection
         echo '<form method="post" class="meta-viewer-form">';
         wp_nonce_field('display_product_meta_action');
-        
+
         echo '<div class="product-input-section">';
         echo '<h3>Enter Details for Product 1:</h3>';
         echo '<div class="input-group">';
         echo '<label for="product_sku_1">SKU:</label>';
         echo '<input type="text" id="product_sku_1" name="product_sku_1" value="' . esc_attr($sku1) . '">';
         echo '</div>';
-        
+
         echo '<div class="input-group">';
         echo '<label for="product_id_1">OR ID:</label>';
         echo '<input type="number" id="product_id_1" name="product_id_1" value="' . esc_attr($id1) . '">';
         echo '</div>';
         echo '</div>';
-        
+
         echo '<div class="product-input-section">';
         echo '<h3>Optional - Enter Details for Product 2 (for comparison):</h3>';
         echo '<div class="input-group">';
         echo '<label for="product_sku_2">SKU:</label>';
         echo '<input type="text" id="product_sku_2" name="product_sku_2" value="' . esc_attr($sku2) . '">';
         echo '</div>';
-        
+
         echo '<div class="input-group">';
         echo '<label for="product_id_2">OR ID:</label>';
         echo '<input type="number" id="product_id_2" name="product_id_2" value="' . esc_attr($id2) . '">';
@@ -508,8 +525,68 @@ class Product_Meta_Viewer {
         echo '<br>';
         echo '<input type="submit" name="submit" value="Get/Compare Products" class="button button-primary">';
         echo '</form>';
-        
+
         echo '</div>'; // .wrap
+    }
+
+    // Settings tab content
+    private function display_settings_tab_content() {
+        // Handle API key masking and update (for demonstration, not persistent)
+        $masked_key = '';
+        if (isset($_POST['woo_inv_to_rs_api_key']) && check_admin_referer('woo_inv_to_rs_settings_nonce', 'woo_inv_to_rs_settings_nonce')) {
+            $masked_key = str_repeat('*', max(0, strlen($_POST['woo_inv_to_rs_api_key']) - 4)) . substr($_POST['woo_inv_to_rs_api_key'], -4);
+        } else {
+            $masked_key = '****'; // Default masked value
+        }
+
+        // Handle "Check for Plugin Updates" button
+        if (isset($_POST['woo_inv_to_rs_check_update']) && check_admin_referer('woo_inv_to_rs_settings_nonce', 'woo_inv_to_rs_settings_nonce')) {
+            // Simulate the cron event for plugin update check
+            do_action('wp_update_plugins');
+            if (function_exists('wp_clean_plugins_cache')) {
+                wp_clean_plugins_cache(true);
+            }
+            // Remove the update_plugins transient to force a check
+            delete_site_transient('update_plugins');
+            // Call the update check directly as well
+            if (function_exists('wp_update_plugins')) {
+                wp_update_plugins();
+            }
+            // Get update info
+            $plugin_file = plugin_basename(__FILE__);
+            $update_plugins = get_site_transient('update_plugins');
+            $update_msg = '';
+            if (isset($update_plugins->response) && isset($update_plugins->response[$plugin_file])) {
+                $new_version = $update_plugins->response[$plugin_file]->new_version;
+                $update_msg = '<div class="updated"><p>Update available: version ' . esc_html($new_version) . '.</p></div>';
+            } else {
+                $update_msg = '<div class="updated"><p>No update available for this plugin.</p></div>';
+            }
+            echo $update_msg;
+        }
+        ?>
+        <div class="wrap">
+            <h2>RepairShopr API Settings</h2>
+            <form method="post" action="">
+                <?php wp_nonce_field('woo_inv_to_rs_settings_nonce', 'woo_inv_to_rs_settings_nonce'); ?>
+                <table class="form-table">
+                    <tr>
+                        <th><label for="woo_inv_to_rs_api_key">API Key</label></th>
+                        <td>
+                            <input type="text" id="woo_inv_to_rs_api_key" name="woo_inv_to_rs_api_key" value="<?php echo esc_attr($masked_key); ?>" class="regular-text" autocomplete="off">
+                            <p class="description">For security, only the last 4 characters are shown. Enter a new key to update.</p>
+                        </td>
+                    </tr>
+                </table>
+                <?php submit_button(); ?>
+            </form>
+            <form method="post" action="" style="margin-top:2em;">
+                <?php wp_nonce_field('woo_inv_to_rs_settings_nonce', 'woo_inv_to_rs_settings_nonce'); ?>
+                <input type="hidden" name="woo_inv_to_rs_check_update" value="1">
+                <?php submit_button('Check for Plugin Updates', 'secondary'); ?>
+            </form>
+        </div>
+        <?php
     }
     
     /**
