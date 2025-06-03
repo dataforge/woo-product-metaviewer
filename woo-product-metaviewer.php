@@ -531,14 +531,6 @@ class Product_Meta_Viewer {
 
     // Settings tab content
     private function display_settings_tab_content() {
-        // Handle API key masking and update (for demonstration, not persistent)
-        $masked_key = '';
-        if (isset($_POST['woo_inv_to_rs_api_key']) && check_admin_referer('woo_inv_to_rs_settings_nonce', 'woo_inv_to_rs_settings_nonce')) {
-            $masked_key = str_repeat('*', max(0, strlen($_POST['woo_inv_to_rs_api_key']) - 4)) . substr($_POST['woo_inv_to_rs_api_key'], -4);
-        } else {
-            $masked_key = '****'; // Default masked value
-        }
-
         // Handle "Check for Plugin Updates" button
         if (isset($_POST['woo_inv_to_rs_check_update']) && check_admin_referer('woo_inv_to_rs_settings_nonce', 'woo_inv_to_rs_settings_nonce')) {
             // Simulate the cron event for plugin update check
@@ -566,21 +558,8 @@ class Product_Meta_Viewer {
         }
         ?>
         <div class="wrap">
-            <h2>RepairShopr API Settings</h2>
+            <h2>Plugin Update Settings</h2>
             <form method="post" action="">
-                <?php wp_nonce_field('woo_inv_to_rs_settings_nonce', 'woo_inv_to_rs_settings_nonce'); ?>
-                <table class="form-table">
-                    <tr>
-                        <th><label for="woo_inv_to_rs_api_key">API Key</label></th>
-                        <td>
-                            <input type="text" id="woo_inv_to_rs_api_key" name="woo_inv_to_rs_api_key" value="<?php echo esc_attr($masked_key); ?>" class="regular-text" autocomplete="off">
-                            <p class="description">For security, only the last 4 characters are shown. Enter a new key to update.</p>
-                        </td>
-                    </tr>
-                </table>
-                <?php submit_button(); ?>
-            </form>
-            <form method="post" action="" style="margin-top:2em;">
                 <?php wp_nonce_field('woo_inv_to_rs_settings_nonce', 'woo_inv_to_rs_settings_nonce'); ?>
                 <input type="hidden" name="woo_inv_to_rs_check_update" value="1">
                 <?php submit_button('Check for Plugin Updates', 'secondary'); ?>
