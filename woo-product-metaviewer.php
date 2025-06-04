@@ -24,7 +24,19 @@ class Product_Meta_Viewer {
             return;
         }
         
+        // Enqueue plugin styles
         wp_enqueue_style('product-meta-viewer-styles', plugin_dir_url(__FILE__) . 'css/admin-style.css', array(), '1.0.0');
+        
+        // Enqueue Select2 (bundled with WP, but fallback to CDN if needed)
+        wp_enqueue_style('select2', 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css', array(), '4.1.0');
+        wp_enqueue_script('select2', 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js', array('jquery'), '4.1.0', true);
+
+        // Enqueue custom JS for AJAX product picker
+        wp_enqueue_script('product-meta-viewer-picker', plugin_dir_url(__FILE__) . 'js/product-meta-viewer-picker.js', array('jquery', 'select2'), '1.0.0', true);
+        wp_localize_script('product-meta-viewer-picker', 'PMVPicker', array(
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('pmv_product_search')
+        ));
     }
 
     function add_product_meta_viewer_menu() {
@@ -406,6 +418,16 @@ class Product_Meta_Viewer {
             $post_sku2 = isset($_POST['product_sku_2']) ? sanitize_text_field($_POST['product_sku_2']) : '';
             $post_id2 = isset($_POST['product_id_2']) ? intval($_POST['product_id_2']) : '';
 
+            // Sanitize and use product_pick_1 and product_pick_2 if set (override ID fields)
+            $post_pick1 = isset($_POST['product_pick_1']) ? intval($_POST['product_pick_1']) : 0;
+            $post_pick2 = isset($_POST['product_pick_2']) ? intval($_POST['product_pick_2']) : 0;
+            if ($post_pick1 > 0) {
+                $post_id1 = $post_pick1;
+            }
+            if ($post_pick2 > 0) {
+                $post_id2 = $post_pick2;
+            }
+
             // Build redirect URL
             $redirect_url = $this->get_permalink_with_params($post_sku1, $post_id1, $post_sku2, $post_id2);
 
@@ -507,6 +529,13 @@ class Product_Meta_Viewer {
         echo '<label for="product_id_1">OR ID:</label>';
         echo '<input type="number" id="product_id_1" name="product_id_1" value="' . esc_attr($id1) . '">';
         echo '</div>';
+
+        // Add AJAX-powered Pick dropdown
+        echo '<div class="input-group">';
+        echo '<label for="product_pick_1">Pick:</label>';
+        echo '<select id="product_pick_1" class="pmv-product-picker" data-target="#product_id_1" style="width: 100%;" name="product_pick_1"></select>';
+        echo '</div>';
+
         echo '</div>';
 
         echo '<div class="product-input-section">';
@@ -520,6 +549,13 @@ class Product_Meta_Viewer {
         echo '<label for="product_id_2">OR ID:</label>';
         echo '<input type="number" id="product_id_2" name="product_id_2" value="' . esc_attr($id2) . '">';
         echo '</div>';
+
+        // Add AJAX-powered Pick dropdown
+        echo '<div class="input-group">';
+        echo '<label for="product_pick_2">Pick:</label>';
+        echo '<select id="product_pick_2" class="pmv-product-picker" data-target="#product_id_2" style="width: 100%;" name="product_pick_2"></select>';
+        echo '</div>';
+
         echo '</div>';
 
         echo '<br>';
@@ -602,11 +638,88 @@ class Product_Meta_Viewer {
     public static function deactivate() {
         // Clean up if needed
     }
+    // AJAX handler for product search (for Select2)
+    public function ajax_product_search() {
+        check_ajax_referer('pmv_product_search', 'nonce');
+
+        if (!current_user_can('manage_woocommerce')) {
+            wp_send_json_error(array('message' => 'Unauthorized'), 403);
+        }
+
+        $term = isset($_GET['q']) ? sanitize_text_field(wp_unslash($_GET['q'])) : '';
+        $results = array();
+
+        if (!class_exists('WC_Product_Query')) {
+            wp_send_json(array());
+        }
+
+        // Query products and variations by name or SKU
+        $args = array(
+            'limit' => 20,
+            'status' => 'publish',
+            'type' => array('simple', 'variable', 'variation'),
+            's' => $term,
+            'return' => 'objects',
+        );
+
+        $products = wc_get_products($args);
+
+        foreach ($products as $product) {
+            // For variable products, add each variation as a separate entry
+            if ($product->is_type('variable')) {
+                $children = $product->get_children();
+                foreach ($children as $child_id) {
+                    $variation = wc_get_product($child_id);
+                    if ($variation) {
+                        $label = $product->get_name();
+                        $attributes = wc_get_formatted_variation($variation, true, false, true);
+                        $sku = $variation->get_sku();
+                        $text = $label . ' ' . $attributes . ' (ID: ' . $variation->get_id() . ')';
+                        if ($sku) {
+                            $text .= ' [SKU: ' . $sku . ']';
+                        }
+                        // Match search term against name, attributes, or SKU
+                        if (
+                            stripos($label, $term) !== false ||
+                            stripos($attributes, $term) !== false ||
+                            ($sku && stripos($sku, $term) !== false)
+                        ) {
+                            $results[] = array(
+                                'id' => $variation->get_id(),
+                                'text' => $text,
+                            );
+                        }
+                    }
+                }
+            } else {
+                $label = $product->get_name();
+                $sku = $product->get_sku();
+                $text = $label . ' (ID: ' . $product->get_id() . ')';
+                if ($sku) {
+                    $text .= ' [SKU: ' . $sku . ']';
+                }
+                // Match search term against name or SKU
+                if (
+                    stripos($label, $term) !== false ||
+                    ($sku && stripos($sku, $term) !== false)
+                ) {
+                    $results[] = array(
+                        'id' => $product->get_id(),
+                        'text' => $text,
+                    );
+                }
+            }
+        }
+
+        wp_send_json(array('results' => $results));
+    }
 }
 
-// Initialize the plugin
 $product_meta_viewer = new Product_Meta_Viewer();
 
 // Register activation and deactivation hooks
 register_activation_hook(__FILE__, array('Product_Meta_Viewer', 'activate'));
 register_deactivation_hook(__FILE__, array('Product_Meta_Viewer', 'deactivate'));
+
+// Register AJAX handler
+add_action('wp_ajax_pmv_product_search', array($product_meta_viewer, 'ajax_product_search'));
