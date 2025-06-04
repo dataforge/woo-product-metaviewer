@@ -664,49 +664,79 @@ class Product_Meta_Viewer {
 
         $products = wc_get_products($args);
 
+        $added_ids = array();
+
         foreach ($products as $product) {
-            // For variable products, add each variation as a separate entry
+            // Add parent variable product (only once)
             if ($product->is_type('variable')) {
+                $parent_id = $product->get_id();
+                if (!in_array($parent_id, $added_ids, true)) {
+                    $label = $product->get_name();
+                    $sku = $product->get_sku();
+                    $text = $label . ' (ID: ' . $parent_id . ')';
+                    if ($sku) {
+                        $text .= ' [SKU: ' . $sku . ']';
+                    }
+                    // Match search term against name or SKU
+                    if (
+                        stripos($label, $term) !== false ||
+                        ($sku && stripos($sku, $term) !== false)
+                    ) {
+                        $results[] = array(
+                            'id' => $parent_id,
+                            'text' => $text,
+                        );
+                        $added_ids[] = $parent_id;
+                    }
+                }
+                // Add each variation as a separate entry (with its own ID/SKU)
                 $children = $product->get_children();
                 foreach ($children as $child_id) {
-                    $variation = wc_get_product($child_id);
-                    if ($variation) {
-                        $label = $product->get_name();
-                        $attributes = wc_get_formatted_variation($variation, true, false, true);
-                        $sku = $variation->get_sku();
-                        $text = $label . ' ' . $attributes . ' (ID: ' . $variation->get_id() . ')';
-                        if ($sku) {
-                            $text .= ' [SKU: ' . $sku . ']';
-                        }
-                        // Match search term against name, attributes, or SKU
-                        if (
-                            stripos($label, $term) !== false ||
-                            stripos($attributes, $term) !== false ||
-                            ($sku && stripos($sku, $term) !== false)
-                        ) {
-                            $results[] = array(
-                                'id' => $variation->get_id(),
-                                'text' => $text,
-                            );
+                    if (!in_array($child_id, $added_ids, true)) {
+                        $variation = wc_get_product($child_id);
+                        if ($variation) {
+                            $label = $product->get_name();
+                            $attributes = wc_get_formatted_variation($variation, true, false, true);
+                            $sku = $variation->get_sku();
+                            $text = $label . ' ' . $attributes . ' (ID: ' . $variation->get_id() . ')';
+                            if ($sku) {
+                                $text .= ' [SKU: ' . $sku . ']';
+                            }
+                            // Match search term against name, attributes, or SKU
+                            if (
+                                stripos($label, $term) !== false ||
+                                stripos($attributes, $term) !== false ||
+                                ($sku && stripos($sku, $term) !== false)
+                            ) {
+                                $results[] = array(
+                                    'id' => $variation->get_id(),
+                                    'text' => $text,
+                                );
+                                $added_ids[] = $variation->get_id();
+                            }
                         }
                     }
                 }
             } else {
-                $label = $product->get_name();
-                $sku = $product->get_sku();
-                $text = $label . ' (ID: ' . $product->get_id() . ')';
-                if ($sku) {
-                    $text .= ' [SKU: ' . $sku . ']';
-                }
-                // Match search term against name or SKU
-                if (
-                    stripos($label, $term) !== false ||
-                    ($sku && stripos($sku, $term) !== false)
-                ) {
-                    $results[] = array(
-                        'id' => $product->get_id(),
-                        'text' => $text,
-                    );
+                $id = $product->get_id();
+                if (!in_array($id, $added_ids, true)) {
+                    $label = $product->get_name();
+                    $sku = $product->get_sku();
+                    $text = $label . ' (ID: ' . $id . ')';
+                    if ($sku) {
+                        $text .= ' [SKU: ' . $sku . ']';
+                    }
+                    // Match search term against name or SKU
+                    if (
+                        stripos($label, $term) !== false ||
+                        ($sku && stripos($sku, $term) !== false)
+                    ) {
+                        $results[] = array(
+                            'id' => $id,
+                            'text' => $text,
+                        );
+                        $added_ids[] = $id;
+                    }
                 }
             }
         }
