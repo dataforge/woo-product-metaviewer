@@ -695,10 +695,10 @@ class Product_Meta_Viewer {
                     if (!in_array($child_id, $added_ids, true)) {
                         $variation = wc_get_product($child_id);
                         if ($variation) {
-                            $label = $product->get_name();
+                            $label = $variation->get_name();
                             $attributes = wc_get_formatted_variation($variation, true, false, true);
                             $sku = $variation->get_sku();
-                            $text = $label . ' ' . $attributes . ' (ID: ' . $variation->get_id() . ')';
+                            $text = $label . ' (ID: ' . $variation->get_id() . ')';
                             if ($sku) {
                                 $text .= ' [SKU: ' . $sku . ']';
                             }
