@@ -271,37 +271,24 @@ class Product_Meta_Viewer {
     }
 
     /**
-     * Filter metadata to show only relevant fields
+     * Get all metadata without any filtering
      */
     function filter_relevant_metadata($metadata) {
         $filtered = array();
-        $exclude_keys = array(
-            '_edit_lock', '_edit_last', '_wp_old_slug', '_wp_old_date',
-            '_thumbnail_id', '_product_image_gallery', '_wc_rating_count',
-            '_wc_average_rating', '_wc_review_count', '_product_attributes',
-            '_default_attributes', '_swatch_type', '_swatch_type_options',
-            '_manage_stock', '_stock_status', '_backorders', '_sold_individually',
-            '_weight', '_length', '_width', '_height', '_sku', '_regular_price',
-            '_sale_price', '_price', '_featured', '_catalog_visibility',
-            '_tax_status', '_tax_class', '_purchase_note', '_virtual',
-            '_downloadable', '_download_limit', '_download_expiry',
-            '_stock', '_low_stock_amount', '_wc_pb_edit_in_cart',
-            '_wc_pb_aggregate_weight', '_wc_pb_shipped_individually'
-        );
         
+        // Include ALL metadata without any filtering
         foreach ($metadata as $key => $values) {
-            if (in_array($key, $exclude_keys) || strpos($key, '_yoast_') === 0) {
-                continue;
-            }
-            
             if (!empty($values)) {
                 foreach ($values as $value) {
-                    if (!empty($value)) {
+                    if ($value !== '' && $value !== null) { // Allow 0 values
                         $filtered[$key] = is_array($value) || is_object($value) ? 
                             print_r($value, true) : $value;
                         break; // Only take first non-empty value
                     }
                 }
+            } else {
+                // Include empty values as well
+                $filtered[$key] = '';
             }
         }
         
