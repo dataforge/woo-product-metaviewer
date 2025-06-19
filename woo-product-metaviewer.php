@@ -234,13 +234,36 @@ class Product_Meta_Viewer {
         }
         
         $attribute_data = array();
-        foreach ($attributes as $attribute) {
-            if ($attribute->is_taxonomy()) {
-                $terms = wp_get_post_terms($product->get_id(), $attribute->get_name());
-                $values = $terms && !is_wp_error($terms) ? wp_list_pluck($terms, 'name') : array();
-                $attribute_data[$attribute->get_name()] = implode(', ', $values);
+        foreach ($attributes as $attribute_name => $attribute) {
+            // Handle case where $attribute might be a string instead of an object
+            if (is_string($attribute)) {
+                // If it's a string, treat it as a custom attribute value
+                $attribute_data[$attribute_name] = $attribute;
+            } elseif (is_object($attribute) && method_exists($attribute, 'is_taxonomy')) {
+                // Handle proper WC_Product_Attribute objects
+                if ($attribute->is_taxonomy()) {
+                    $terms = wp_get_post_terms($product->get_id(), $attribute->get_name());
+                    $values = $terms && !is_wp_error($terms) ? wp_list_pluck($terms, 'name') : array();
+                    $attribute_data[$attribute->get_name()] = implode(', ', $values);
+                } else {
+                    $attribute_data[$attribute->get_name()] = implode(', ', $attribute->get_options());
+                }
+            } elseif (is_array($attribute)) {
+                // Handle case where attribute is an array
+                if (isset($attribute['is_taxonomy']) && $attribute['is_taxonomy']) {
+                    $taxonomy = isset($attribute['name']) ? $attribute['name'] : $attribute_name;
+                    $terms = wp_get_post_terms($product->get_id(), $taxonomy);
+                    $values = $terms && !is_wp_error($terms) ? wp_list_pluck($terms, 'name') : array();
+                    $attribute_data[$taxonomy] = implode(', ', $values);
+                } else {
+                    $value = isset($attribute['value']) ? $attribute['value'] : 
+                             (isset($attribute['options']) ? implode(', ', $attribute['options']) : 
+                              print_r($attribute, true));
+                    $attribute_data[$attribute_name] = $value;
+                }
             } else {
-                $attribute_data[$attribute->get_name()] = implode(', ', $attribute->get_options());
+                // Fallback for any other data type
+                $attribute_data[$attribute_name] = is_scalar($attribute) ? $attribute : print_r($attribute, true);
             }
         }
         
