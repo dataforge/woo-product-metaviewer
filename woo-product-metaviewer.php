@@ -62,22 +62,113 @@ class Product_Meta_Viewer {
         return esc_url(get_admin_url(null, "post.php?post={$product_id}&action=edit"));
     }
 
-    function display_product_metadata_table($product, $metadata) {
+    /**
+     * Get complete product data for unified display
+     */
+    function get_complete_product_data($product) {
         if (!$product || !is_a($product, 'WC_Product')) {
-            echo '<div class="error"><p>Invalid product object.</p></div>';
-            return;
+            return array();
         }
+
+        $data = array();
+        $is_variation = $product->is_type('variation');
+        $parent_id = $is_variation ? $product->get_parent_id() : $product->get_id();
+        $parent_product = $is_variation ? wc_get_product($parent_id) : null;
+
+        // Basic Product Information
+        $data['Product ID'] = $product->get_id();
+        $data['Product Name'] = $product->get_name();
+        $data['Date Created'] = $product->get_date_created() ? $product->get_date_created()->date('Y-m-d H:i:s') : '';
+        $data['Date Modified'] = $product->get_date_modified() ? $product->get_date_modified()->date('Y-m-d H:i:s') : '';
+        $data['Product Type'] = $product->get_type();
+        $data['Product Status'] = $product->get_status();
+
+        // Parent/Variation Relationship
+        if ($is_variation && $parent_product) {
+            $data['Parent ID'] = $parent_id;
+            $data['Parent Name'] = $parent_product->get_name();
+            $data['Parent SKU'] = $parent_product->get_sku();
+            $data['Variation SKU'] = $product->get_sku();
+        } else {
+            $data['SKU'] = $product->get_sku();
+        }
+
+        // Pricing Information
+        $data['Regular Price'] = $product->get_regular_price() ? wc_price($product->get_regular_price()) : 'Not set';
+        $data['Sale Price'] = $product->get_sale_price() ? wc_price($product->get_sale_price()) : 'Not on sale';
+        $data['Price HTML'] = $product->get_price_html();
+        $data['Tax Status'] = $product->get_tax_status();
+        $data['Tax Class'] = $product->get_tax_class() ?: 'Standard';
+
+        // Stock Management
+        $data['Stock Status'] = $product->get_stock_status();
+        $data['Manage Stock'] = $product->managing_stock() ? 'Yes' : 'No';
+        if ($product->managing_stock()) {
+            $data['Stock Quantity'] = $product->get_stock_quantity();
+            $data['Low Stock Amount'] = $product->get_low_stock_amount() ?: 'Not set';
+        }
+        $data['Backorders'] = $product->get_backorders();
+        $data['Sold Individually'] = $product->is_sold_individually() ? 'Yes' : 'No';
+
+        // Physical Properties
+        if ($product->has_weight()) {
+            $data['Weight'] = $product->get_weight() . ' ' . get_option('woocommerce_weight_unit');
+        }
+        if ($product->has_dimensions()) {
+            $data['Dimensions (L×W×H)'] = $product->get_length() . ' × ' . $product->get_width() . ' × ' . $product->get_height() . ' ' . get_option('woocommerce_dimension_unit');
+        }
+        $data['Virtual'] = $product->is_virtual() ? 'Yes' : 'No';
+        $data['Downloadable'] = $product->is_downloadable() ? 'Yes' : 'No';
+
+        // Visibility and Features
+        $data['Catalog Visibility'] = $product->get_catalog_visibility();
+        $data['Featured'] = $product->is_featured() ? 'Yes' : 'No';
+        $data['Reviews Allowed'] = $product->get_reviews_allowed() ? 'Yes' : 'No';
+        $data['Menu Order'] = $product->get_menu_order();
+
+        // Content
+        $data['Short Description'] = $product->get_short_description();
+        $data['Description'] = $product->get_description();
+
+        // Images
+        $data['Featured Image'] = $this->get_product_image_data($product);
+        $data['Product Gallery'] = $this->get_product_gallery_data($product);
+
+        // Categories and Tags (use parent for variations)
+        $cat_product_id = $is_variation ? $parent_id : $product->get_id();
+        $data['Product Categories'] = implode(', ', $this->get_product_categories($cat_product_id));
         
-        $parent_product_id = $product->is_type('variation') ? $product->get_parent_id() : $product->get_id();
+        $tags = get_the_terms($cat_product_id, 'product_tag');
+        $data['Product Tags'] = ($tags && !is_wp_error($tags)) ? implode(', ', wp_list_pluck($tags, 'name')) : '';
+
+        // Attributes
+        $data['Product Attributes'] = $this->get_product_attributes_data($product);
+
+        // URLs
+        $data['Product URL'] = get_permalink($product->get_id());
+        $data['Edit Product URL'] = $this->get_product_edit_link($parent_id);
+
+        // Shipping
+        $data['Shipping Class'] = $product->get_shipping_class();
         
-        echo '<h3>Product: ' . esc_html($product->get_name()) . ' (ID: ' . esc_html($product->get_id()) . ') <a href="' . $this->get_product_edit_link($parent_product_id) . '" target="_blank">Edit Product</a></h3>';
-        
-        echo '<table class="widefat meta-viewer-table"><tbody>';
-        echo '<tr><td>Product ID</td><td>' . esc_html($product->get_id()) . '</td></tr>';
-        echo '<tr><td>Date Posted</td><td>' . esc_html(get_the_date('', $product->get_id())) . '</td></tr>';
-        echo '<tr><td>Product Type</td><td>' . esc_html($product->get_type()) . '</td></tr>';
-        
-        // Get product image and attachment details
+        // Purchase Note
+        $purchase_note = $product->get_purchase_note();
+        if ($purchase_note) {
+            $data['Purchase Note'] = $purchase_note;
+        }
+
+        // Custom Metadata
+        $metadata = get_post_meta($product->get_id());
+        $filtered_metadata = $this->filter_relevant_metadata($metadata);
+        $data = array_merge($data, $filtered_metadata);
+
+        return $data;
+    }
+
+    /**
+     * Get product image data with edit links
+     */
+    function get_product_image_data($product) {
         $image_html = $product->get_image(array(150, 150));
         $attachment_id = $product->get_image_id();
         
@@ -90,95 +181,217 @@ class Product_Meta_Viewer {
             }
         }
         
-        // Add featured image row
-        echo '<tr><td>Featured Image</td><td class="product-image-cell">';
         if ($attachment_id) {
             $image_src = wp_get_attachment_image_src($attachment_id, 'full');
             $image_url = $image_src ? $image_src[0] : '';
             $media_edit_link = admin_url('post.php?post=' . $attachment_id . '&action=edit');
             
-            echo $image_html;
-            echo '<div class="image-details">';
-            echo '<a href="' . esc_url($media_edit_link) . '" target="_blank">Edit in Media Library</a>';
-            echo '<br><a href="' . esc_url($image_url) . '" target="_blank">View Full Size Image</a>';
-            echo '</div>';
-        } else {
-            echo 'No featured image';
-        }
-        echo '</td></tr>';
-        
-        // Add prices
-        echo '<tr><td>Regular Price</td><td>' . wc_price($product->get_regular_price()) . '</td></tr>';
-        echo '<tr><td>Sale Price</td><td>' . ($product->get_sale_price() ? wc_price($product->get_sale_price()) : 'Not on sale') . '</td></tr>';
-        
-        // Add stock info
-        echo '<tr><td>Stock Status</td><td>' . esc_html($product->get_stock_status()) . '</td></tr>';
-        if ($product->managing_stock()) {
-            echo '<tr><td>Stock Quantity</td><td>' . esc_html($product->get_stock_quantity()) . '</td></tr>';
+            return array(
+                'html' => $image_html,
+                'edit_link' => $media_edit_link,
+                'full_url' => $image_url,
+                'attachment_id' => $attachment_id
+            );
         }
         
-        echo '<tr><td>Catalog Visibility</td><td>' . esc_html($product->get_catalog_visibility()) . '</td></tr>';
-        echo '<tr><td>Featured Status</td><td>' . ($product->is_featured() ? 'Yes' : 'No') . '</td></tr>';
-        
-        // Add descriptions
-        echo '<tr><td>Short Description</td><td>' . wp_kses_post($product->get_short_description()) . '</td></tr>';
-        
-        // Add dimensions if physical product
-        if ($product->has_weight()) {
-            echo '<tr><td>Weight</td><td>' . esc_html($product->get_weight()) . ' ' . get_option('woocommerce_weight_unit') . '</td></tr>';
+        return array('html' => 'No featured image');
+    }
+
+    /**
+     * Get product gallery data
+     */
+    function get_product_gallery_data($product) {
+        $gallery_ids = $product->get_gallery_image_ids();
+        if (empty($gallery_ids)) {
+            return 'No gallery images';
         }
         
-        if ($product->has_dimensions()) {
-            echo '<tr><td>Dimensions (L×W×H)</td><td>' . 
-                esc_html($product->get_length()) . ' × ' . 
-                esc_html($product->get_width()) . ' × ' . 
-                esc_html($product->get_height()) . ' ' . 
-                get_option('woocommerce_dimension_unit') . '</td></tr>';
+        $gallery_data = array();
+        foreach ($gallery_ids as $attachment_id) {
+            $image_html = wp_get_attachment_image($attachment_id, array(100, 100));
+            $image_src = wp_get_attachment_image_src($attachment_id, 'full');
+            $image_url = $image_src ? $image_src[0] : '';
+            $media_edit_link = admin_url('post.php?post=' . $attachment_id . '&action=edit');
+            
+            $gallery_data[] = array(
+                'html' => $image_html,
+                'edit_link' => $media_edit_link,
+                'full_url' => $image_url,
+                'attachment_id' => $attachment_id
+            );
         }
         
-        // Add permalink with visible URL
-        $permalink = get_permalink($product->get_id());
-        echo '<tr><td>Product URL</td><td>';
-        echo '<a href="' . esc_url($permalink) . '" target="_blank">View Product</a>';
-        echo '<br><span class="url-text">' . esc_url($permalink) . '</span>';
-        echo '</td></tr>';
+        return $gallery_data;
+    }
+
+    /**
+     * Get product attributes data
+     */
+    function get_product_attributes_data($product) {
+        $attributes = $product->get_attributes();
+        if (empty($attributes)) {
+            return 'No attributes';
+        }
         
-        if($product->is_type('variation')) {
-            echo '<tr><td>Parent ID</td><td>' . esc_html($product->get_parent_id()) . '</td></tr>';
-            $parent_product = wc_get_product($product->get_parent_id());
-            if ($parent_product) {
-                echo '<tr><td>Parent SKU</td><td>' . esc_html($parent_product->get_sku()) . '</td></tr>';
+        $attribute_data = array();
+        foreach ($attributes as $attribute) {
+            if ($attribute->is_taxonomy()) {
+                $terms = wp_get_post_terms($product->get_id(), $attribute->get_name());
+                $values = $terms && !is_wp_error($terms) ? wp_list_pluck($terms, 'name') : array();
+                $attribute_data[$attribute->get_name()] = implode(', ', $values);
+            } else {
+                $attribute_data[$attribute->get_name()] = implode(', ', $attribute->get_options());
             }
-            echo '<tr><td>Variation ID</td><td>' . esc_html($product->get_id()) . '</td></tr>';  // This would be same as Product ID for variations
-            echo '<tr><td>Variation SKU</td><td>' . esc_html($product->get_sku()) . '</td></tr>';
         }
+        
+        return $attribute_data;
+    }
+
+    /**
+     * Filter metadata to show only relevant fields
+     */
+    function filter_relevant_metadata($metadata) {
+        $filtered = array();
+        $exclude_keys = array(
+            '_edit_lock', '_edit_last', '_wp_old_slug', '_wp_old_date',
+            '_thumbnail_id', '_product_image_gallery', '_wc_rating_count',
+            '_wc_average_rating', '_wc_review_count', '_product_attributes',
+            '_default_attributes', '_swatch_type', '_swatch_type_options',
+            '_manage_stock', '_stock_status', '_backorders', '_sold_individually',
+            '_weight', '_length', '_width', '_height', '_sku', '_regular_price',
+            '_sale_price', '_price', '_featured', '_catalog_visibility',
+            '_tax_status', '_tax_class', '_purchase_note', '_virtual',
+            '_downloadable', '_download_limit', '_download_expiry',
+            '_stock', '_low_stock_amount', '_wc_pb_edit_in_cart',
+            '_wc_pb_aggregate_weight', '_wc_pb_shipped_individually'
+        );
         
         foreach ($metadata as $key => $values) {
-            if (empty($values)) continue;
+            if (in_array($key, $exclude_keys) || strpos($key, '_yoast_') === 0) {
+                continue;
+            }
             
-            foreach ($values as $value) {
-                echo '<tr>';
-                echo '<td>' . esc_html($key) . '</td>';
-                
-                // Handle different metadata types appropriately
-                if (is_array($value) || is_object($value)) {
-                    echo '<td><pre>' . esc_html(print_r($value, true)) . '</pre></td>';
-                } else {
-                    echo '<td>' . esc_html($value) . '</td>';
+            if (!empty($values)) {
+                foreach ($values as $value) {
+                    if (!empty($value)) {
+                        $filtered[$key] = is_array($value) || is_object($value) ? 
+                            print_r($value, true) : $value;
+                        break; // Only take first non-empty value
+                    }
                 }
-                echo '</tr>';
             }
         }
         
-        echo '<tr>';
-        echo '<td>Product Categories</td>';
-        echo '<td>' . esc_html(implode(', ', $this->get_product_categories($parent_product_id))) . '</td>';
-        echo '</tr>';
+        return $filtered;
+    }
+
+    /**
+     * Format a value for display
+     */
+    function format_product_value($value) {
+        if (is_array($value)) {
+            if (isset($value['html'])) {
+                // This is image data
+                $output = $value['html'];
+                if (isset($value['edit_link']) && isset($value['full_url'])) {
+                    $output .= '<div class="image-details">';
+                    $output .= '<a href="' . esc_url($value['edit_link']) . '" target="_blank">Edit in Media Library</a>';
+                    $output .= '<br><a href="' . esc_url($value['full_url']) . '" target="_blank">View Full Size</a>';
+                    $output .= '</div>';
+                }
+                return $output;
+            } elseif (is_numeric(key($value))) {
+                // This is gallery data
+                $output = '';
+                foreach ($value as $item) {
+                    if (isset($item['html'])) {
+                        $output .= '<div class="gallery-item" style="display: inline-block; margin: 5px;">';
+                        $output .= $item['html'];
+                        if (isset($item['edit_link'])) {
+                            $output .= '<br><a href="' . esc_url($item['edit_link']) . '" target="_blank" style="font-size: 11px;">Edit</a>';
+                        }
+                        $output .= '</div>';
+                    }
+                }
+                return $output ?: 'No gallery images';
+            } else {
+                // Regular array data
+                $formatted = array();
+                foreach ($value as $k => $v) {
+                    $formatted[] = $k . ': ' . $v;
+                }
+                return implode('<br>', $formatted);
+            }
+        } elseif (is_object($value)) {
+            return '<pre>' . esc_html(print_r($value, true)) . '</pre>';
+        } elseif (filter_var($value, FILTER_VALIDATE_URL)) {
+            return '<a href="' . esc_url($value) . '" target="_blank">View</a><br><span class="url-text">' . esc_url($value) . '</span>';
+        } else {
+            return wp_kses_post($value);
+        }
+    }
+
+    /**
+     * Compare two values for difference highlighting
+     */
+    function compare_values($value1, $value2) {
+        // Handle array comparisons
+        if (is_array($value1) && is_array($value2)) {
+            return serialize($value1) !== serialize($value2);
+        }
         
-        // Add product tags
-        $tags = get_the_terms($parent_product_id, 'product_tag');
-        if ($tags && !is_wp_error($tags)) {
-            echo '<tr><td>Product Tags</td><td>' . esc_html(implode(', ', wp_list_pluck($tags, 'name'))) . '</td></tr>';
+        // Handle URL comparisons (ignore the links, compare actual URLs)
+        if (is_string($value1) && is_string($value2)) {
+            $clean1 = strip_tags($value1);
+            $clean2 = strip_tags($value2);
+            return $clean1 !== $clean2;
+        }
+        
+        return $value1 !== $value2;
+    }
+
+    /**
+     * Display a unified product data row
+     */
+    function display_product_data_row($label, $value1, $value2 = null, $highlight_differences = false) {
+        $is_comparison = ($value2 !== null);
+        $highlight = '';
+        
+        if ($is_comparison && $highlight_differences && $this->compare_values($value1, $value2)) {
+            $highlight = ' style="background-color: #ffcccc;"';
+        }
+        
+        echo '<tr' . $highlight . '>';
+        echo '<td>' . esc_html($label) . '</td>';
+        
+        if ($is_comparison) {
+            echo '<td class="product-data-cell">' . $this->format_product_value($value1) . '</td>';
+            echo '<td class="product-data-cell">' . $this->format_product_value($value2) . '</td>';
+        } else {
+            echo '<td class="product-data-cell">' . $this->format_product_value($value1) . '</td>';
+        }
+        
+        echo '</tr>';
+    }
+
+    function display_product_metadata_table($product, $metadata) {
+        if (!$product || !is_a($product, 'WC_Product')) {
+            echo '<div class="error"><p>Invalid product object.</p></div>';
+            return;
+        }
+        
+        $parent_product_id = $product->is_type('variation') ? $product->get_parent_id() : $product->get_id();
+        
+        echo '<h3>Product: ' . esc_html($product->get_name()) . ' (ID: ' . esc_html($product->get_id()) . ') <a href="' . $this->get_product_edit_link($parent_product_id) . '" target="_blank">Edit Product</a></h3>';
+        
+        // Get complete product data using unified function
+        $product_data = $this->get_complete_product_data($product);
+        
+        echo '<table class="widefat meta-viewer-table"><tbody>';
+        
+        // Display all product data using unified display function
+        foreach ($product_data as $label => $value) {
+            $this->display_product_data_row($label, $value);
         }
         
         echo '</tbody></table>';
@@ -191,8 +404,11 @@ class Product_Meta_Viewer {
             return;
         }
         
-        $edit_link1 = $this->get_product_edit_link($product1->get_id());
-        $edit_link2 = $this->get_product_edit_link($product2->get_id());
+        $parent_id1 = $product1->is_type('variation') ? $product1->get_parent_id() : $product1->get_id();
+        $parent_id2 = $product2->is_type('variation') ? $product2->get_parent_id() : $product2->get_id();
+        
+        $edit_link1 = $this->get_product_edit_link($parent_id1);
+        $edit_link2 = $this->get_product_edit_link($parent_id2);
 
         // Display product images
         echo '<div class="product-comparison-images">';
@@ -207,6 +423,10 @@ class Product_Meta_Viewer {
         echo '</div>';
         echo '</div>';
 
+        // Get complete product data using unified function
+        $product_data1 = $this->get_complete_product_data($product1);
+        $product_data2 = $this->get_complete_product_data($product2);
+
         echo '<table class="widefat meta-viewer-table comparison-table">';
         echo '<thead>';
         echo '<tr>';
@@ -217,168 +437,15 @@ class Product_Meta_Viewer {
         echo '</thead>';
         echo '<tbody>';
 
-        // Helper function to create highlighted rows
-        $create_highlighted_row = function($label, $value1, $value2) {
-            $highlight = ($value1 !== $value2) ? 'style="background-color: #ffcccc;"' : '';
-            echo "<tr $highlight>";
-            echo '<td>' . $label . '</td>';
-            echo '<td>' . $value1 . '</td>';
-            echo '<td>' . $value2 . '</td>';
-            echo '</tr>';
-        };
+        // Get all unique keys from both products
+        $all_keys = array_unique(array_merge(array_keys($product_data1), array_keys($product_data2)));
 
-        // Display Product ID for both products
-        $create_highlighted_row('Product ID', 
-            esc_html($product1->get_id()), 
-            esc_html($product2->get_id())
-        );
-
-        $create_highlighted_row('Date Posted', 
-            esc_html(get_the_date('', $product1->get_id())), 
-            esc_html(get_the_date('', $product2->get_id()))
-        );
-
-        $create_highlighted_row('Product Type', 
-            esc_html($product1->get_type()), 
-            esc_html($product2->get_type())
-        );
-        
-        // Add prices
-        $create_highlighted_row('Regular Price', 
-            wc_price($product1->get_regular_price()), 
-            wc_price($product2->get_regular_price())
-        );
-
-        $create_highlighted_row('Sale Price', 
-            ($product1->get_sale_price() ? wc_price($product1->get_sale_price()) : 'Not on sale'), 
-            ($product2->get_sale_price() ? wc_price($product2->get_sale_price()) : 'Not on sale')
-        );
-        
-        // Add stock info
-        $create_highlighted_row('Stock Status', 
-            esc_html($product1->get_stock_status()), 
-            esc_html($product2->get_stock_status())
-        );
-
-        $create_highlighted_row('Stock Quantity', 
-            ($product1->managing_stock() ? esc_html($product1->get_stock_quantity()) : 'N/A'), 
-            ($product2->managing_stock() ? esc_html($product2->get_stock_quantity()) : 'N/A')
-        );
-
-        $create_highlighted_row('Catalog Visibility', 
-            esc_html($product1->get_catalog_visibility()), 
-            esc_html($product2->get_catalog_visibility())
-        );
-
-        $create_highlighted_row('Featured Status', 
-            ($product1->is_featured() ? 'Yes' : 'No'), 
-            ($product2->is_featured() ? 'Yes' : 'No')
-        );
-        
-        // Add dimensions
-        $weight1 = $product1->has_weight() ? esc_html($product1->get_weight()) . ' ' . get_option('woocommerce_weight_unit') : 'N/A';
-        $weight2 = $product2->has_weight() ? esc_html($product2->get_weight()) . ' ' . get_option('woocommerce_weight_unit') : 'N/A';
-        
-        $create_highlighted_row('Weight', $weight1, $weight2);
-        
-        $dimensions1 = $product1->has_dimensions() 
-            ? esc_html($product1->get_length()) . ' × ' . esc_html($product1->get_width()) . ' × ' . esc_html($product1->get_height()) . ' ' . get_option('woocommerce_dimension_unit') 
-            : 'N/A';
-        
-        $dimensions2 = $product2->has_dimensions() 
-            ? esc_html($product2->get_length()) . ' × ' . esc_html($product2->get_width()) . ' × ' . esc_html($product2->get_height()) . ' ' . get_option('woocommerce_dimension_unit') 
-            : 'N/A';
+        // Display all product data using unified display function with comparison
+        foreach ($all_keys as $label) {
+            $value1 = isset($product_data1[$label]) ? $product_data1[$label] : '';
+            $value2 = isset($product_data2[$label]) ? $product_data2[$label] : '';
             
-        $create_highlighted_row('Dimensions (L×W×H)', $dimensions1, $dimensions2);
-        
-        // Add Featured Image row
-        echo '<tr>';
-        echo '<td>Featured Image</td>';
-        
-        // Product 1 image
-        echo '<td class="product-image-cell">';
-        $image_html1 = $product1->get_image(array(150, 150));
-        $attachment_id1 = $product1->get_image_id();
-        
-        if ((!$attachment_id1 || empty($image_html1)) && $product1->is_type('variation')) {
-            $parent_product1 = wc_get_product($product1->get_parent_id());
-            if ($parent_product1) {
-                $image_html1 = $parent_product1->get_image(array(150, 150));
-                $attachment_id1 = $parent_product1->get_image_id();
-            }
-        }
-        
-        if ($attachment_id1) {
-            $image_src1 = wp_get_attachment_image_src($attachment_id1, 'full');
-            $image_url1 = $image_src1 ? $image_src1[0] : '';
-            $media_edit_link1 = admin_url('post.php?post=' . $attachment_id1 . '&action=edit');
-            
-            echo $image_html1;
-            echo '<div class="image-details">';
-            echo '<a href="' . esc_url($media_edit_link1) . '" target="_blank">Edit in Media Library</a>';
-            echo '<br><a href="' . esc_url($image_url1) . '" target="_blank">View Full Size Image</a>';
-            echo '</div>';
-        } else {
-            echo 'No featured image';
-        }
-        echo '</td>';
-        
-        // Product 2 image
-        echo '<td class="product-image-cell">';
-        $image_html2 = $product2->get_image(array(150, 150));
-        $attachment_id2 = $product2->get_image_id();
-        
-        if ((!$attachment_id2 || empty($image_html2)) && $product2->is_type('variation')) {
-            $parent_product2 = wc_get_product($product2->get_parent_id());
-            if ($parent_product2) {
-                $image_html2 = $parent_product2->get_image(array(150, 150));
-                $attachment_id2 = $parent_product2->get_image_id();
-            }
-        }
-        
-        if ($attachment_id2) {
-            $image_src2 = wp_get_attachment_image_src($attachment_id2, 'full');
-            $image_url2 = $image_src2 ? $image_src2[0] : '';
-            $media_edit_link2 = admin_url('post.php?post=' . $attachment_id2 . '&action=edit');
-            
-            echo $image_html2;
-            echo '<div class="image-details">';
-            echo '<a href="' . esc_url($media_edit_link2) . '" target="_blank">Edit in Media Library</a>';
-            echo '<br><a href="' . esc_url($image_url2) . '" target="_blank">View Full Size Image</a>';
-            echo '</div>';
-        } else {
-            echo 'No featured image';
-        }
-        echo '</td>';
-        echo '</tr>';
-        
-        // Add product URLs with visible URLs
-        $permalink1 = get_permalink($product1->get_id());
-        $permalink2 = get_permalink($product2->get_id());
-        
-        $url1 = '<a href="' . esc_url($permalink1) . '" target="_blank">View Product</a>';
-        $url1 .= '<br><span class="url-text">' . esc_url($permalink1) . '</span>';
-        
-        $url2 = '<a href="' . esc_url($permalink2) . '" target="_blank">View Product</a>';
-        $url2 .= '<br><span class="url-text">' . esc_url($permalink2) . '</span>';
-        
-        $create_highlighted_row('Product URL', $url1, $url2);
-
-        // Add product tags for comparison
-        $tags1 = get_the_terms($product1->is_type('variation') ? $product1->get_parent_id() : $product1->get_id(), 'product_tag');
-        $tags2 = get_the_terms($product2->is_type('variation') ? $product2->get_parent_id() : $product2->get_id(), 'product_tag');
-        
-        $tags1_str = ($tags1 && !is_wp_error($tags1)) ? implode(', ', wp_list_pluck($tags1, 'name')) : '';
-        $tags2_str = ($tags2 && !is_wp_error($tags2)) ? implode(', ', wp_list_pluck($tags2, 'name')) : '';
-        
-        $create_highlighted_row('Product Tags', esc_html($tags1_str), esc_html($tags2_str));
-
-        $all_keys = array_unique(array_merge(array_keys($metadata1), array_keys($metadata2)));
-
-        foreach ($all_keys as $key) {
-            $value1 = isset($metadata1[$key]) ? (is_array($metadata1[$key]) ? implode(", ", $metadata1[$key]) : $metadata1[$key]) : '';
-            $value2 = isset($metadata2[$key]) ? (is_array($metadata2[$key]) ? implode(", ", $metadata2[$key]) : $metadata2[$key]) : '';
-            $create_highlighted_row(esc_html($key), esc_html($value1), esc_html($value2));
+            $this->display_product_data_row($label, $value1, $value2, true);
         }
 
         echo '</tbody>';
@@ -473,9 +540,8 @@ class Product_Meta_Viewer {
         if (!empty($product_ids_1) && empty($product_ids_2)) {
             $product1 = wc_get_product($product_ids_1[0]);
             if ($product1) {
-                $metadata1 = get_post_meta($product1->get_id());
-                $metadata1['product_categories'] = $this->get_product_categories($product1->is_type('variation') ? $product1->get_parent_id() : $product1->get_id());
-                $this->display_product_metadata_table($product1, $metadata1);
+                // Use unified display function (metadata parameter is no longer used)
+                $this->display_product_metadata_table($product1, array());
 
                 // Display permalink with parameters
                 $view_link = $this->get_permalink_with_params($sku1, $id1);
@@ -493,15 +559,8 @@ class Product_Meta_Viewer {
             if ($product1 && $product2) {
                 echo '<h2>Comparing Metadata</h2>';
 
-                // Fetch metadata for the actual products
-                $metadata1 = get_post_meta($product1->get_id());
-                $metadata2 = get_post_meta($product2->get_id());
-
-                // Add categories to metadata for comparison
-                $metadata1['product_categories'] = $this->get_product_categories($product1->is_type('variation') ? $product1->get_parent_id() : $product1->get_id());
-                $metadata2['product_categories'] = $this->get_product_categories($product2->is_type('variation') ? $product2->get_parent_id() : $product2->get_id());
-
-                $this->display_comparison_table($product1, $metadata1, $product2, $metadata2);
+                // Use unified display function (metadata parameters are no longer used)
+                $this->display_comparison_table($product1, array(), $product2, array());
 
                 // Display permalink with parameters for comparison
                 $compare_link = $this->get_permalink_with_params($sku1, $id1, $sku2, $id2);
