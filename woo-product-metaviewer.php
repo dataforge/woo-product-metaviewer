@@ -3,15 +3,21 @@
 Plugin Name: Woo Product Meta Viewer
 Plugin URI: https://github.com/dataforge/woo-product-metaviewer
 Description: This is a plugin to view and compare product metadata of Woocommerce items.
-Version: 1.11
+Version: 1.12
 Author: Dataforge
 License: GPL2
-GitHub Plugin URI: https://github.com/dataforge/woo-product-metaviewer
+Update URI: https://github.com/dataforge/woo-product-metaviewer
 */
+
+define( 'WOO_PRODUCT_METAVIEWER_VERSION', '1.12' );
+define( 'WOO_PRODUCT_METAVIEWER_FILE', __FILE__ );
 
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
+
+require_once plugin_dir_path( __FILE__ ) . 'includes/class-updater.php';
+Woo_Product_Metaviewer_Updater::init();
 
 class Product_Meta_Viewer {
     function __construct() {
