@@ -3,13 +3,13 @@
 Plugin Name: Woo Product Meta Viewer
 Plugin URI: https://github.com/dataforge/woo-product-metaviewer
 Description: This is a plugin to view and compare product metadata of Woocommerce items.
-Version: 1.12
+Version: 1.13
 Author: Dataforge
 License: GPL2
 Update URI: https://github.com/dataforge/woo-product-metaviewer
 */
 
-define( 'WOO_PRODUCT_METAVIEWER_VERSION', '1.12' );
+define( 'WOO_PRODUCT_METAVIEWER_VERSION', '1.13' );
 define( 'WOO_PRODUCT_METAVIEWER_FILE', __FILE__ );
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -642,38 +642,22 @@ class Product_Meta_Viewer {
 
     // Settings tab content
     private function display_settings_tab_content() {
-        // Handle "Check for Plugin Updates" button
-        if (isset($_POST['woo_inv_to_rs_check_update']) && check_admin_referer('woo_inv_to_rs_settings_nonce', 'woo_inv_to_rs_settings_nonce')) {
-            // Simulate the cron event for plugin update check
-            do_action('wp_update_plugins');
-            if (function_exists('wp_clean_plugins_cache')) {
-                wp_clean_plugins_cache(true);
-            }
-            // Remove the update_plugins transient to force a check
-            delete_site_transient('update_plugins');
-            // Call the update check directly as well
-            if (function_exists('wp_update_plugins')) {
-                wp_update_plugins();
-            }
-            // Get update info
-            $plugin_file = plugin_basename(__FILE__);
-            $update_plugins = get_site_transient('update_plugins');
-            $update_msg = '';
-            if (isset($update_plugins->response) && isset($update_plugins->response[$plugin_file])) {
-                $new_version = $update_plugins->response[$plugin_file]->new_version;
-                $update_msg = '<div class="updated"><p>Update available: version ' . esc_html($new_version) . '.</p></div>';
-            } else {
-                $update_msg = '<div class="updated"><p>No update available for this plugin.</p></div>';
-            }
-            echo $update_msg;
-        }
         ?>
-        <div class="wrap">
-            <h2>Plugin Update Settings</h2>
-            <form method="post" action="">
-                <?php wp_nonce_field('woo_inv_to_rs_settings_nonce', 'woo_inv_to_rs_settings_nonce'); ?>
-                <input type="hidden" name="woo_inv_to_rs_check_update" value="1">
-                <?php submit_button('Check for Plugin Updates', 'secondary'); ?>
+        <div class="card">
+            <h2>Plugin Updates</h2>
+            <p>Current version: <strong>v<?php echo esc_html( WOO_PRODUCT_METAVIEWER_VERSION ); ?></strong>
+            <?php if ( isset( $_GET['update_check'] ) ) : ?>
+                <?php if ( Woo_Product_Metaviewer_Updater::is_update_available() ) : ?>
+                    &mdash; <span style="color:#b32d2e;">Update available!</span> <a href="<?php echo esc_url( admin_url( 'update-core.php' ) ); ?>">Go to Updates</a>
+                <?php else : ?>
+                    &mdash; <span style="color:#00a32a;">Up to date</span>
+                <?php endif; ?>
+            <?php endif; ?>
+            </p>
+            <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline;">
+                <input type="hidden" name="action" value="woo_product_metaviewer_check_updates" />
+                <?php wp_nonce_field( 'woo_product_metaviewer_check_updates' ); ?>
+                <button type="submit" class="button">Check for Updates</button>
             </form>
         </div>
         <?php
